@@ -7,7 +7,9 @@ from __future__ import print_function
 from argparse import ArgumentParser
 
 import os
-import tensorflow as tf
+
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
 
 from util.cfg_layer import get_cfg_layer
 from util.reader import WeightsReader, CFGReader
@@ -21,8 +23,16 @@ def parse_net(num_layers, cfg, weights, training=False, const_inits=True, verbos
     weights_walker = WeightsReader(weights)
     output_index = []
     num_layers = int(num_layers)
+    
+    print("cfg_walker: ++++++")
+    print(cfg_walker)
+    print("--------------- ")
 
     for ith, layer in enumerate(cfg_walker):
+        print("layer +++++")
+        print(layer)
+        print("layer ---------")
+        
         if ith > num_layers and num_layers > 0:
             break
         layer_name = layer['name']

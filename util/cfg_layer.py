@@ -4,7 +4,9 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
+
 
 from layer.reorg_layer import reorg_layer
 
@@ -38,7 +40,7 @@ def cfg_convolutional(B, H, W, C, net, param, weights_walker, stack, output_inde
     size = int(param['size'])
     filters = int(param['filters'])
     stride = int(param['stride'])
-    pad = 'same' if param['pad'] == '1' else 'valid'
+    pad = 'same' if size == 1 or param['pad'] == '1' else 'valid'
     activation = None
     weight_size = C * filters * size * size
 
