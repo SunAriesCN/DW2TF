@@ -18,7 +18,9 @@ _BATCH_NORM_EPSILON = 1e-05
 
 _activation_dict = {
     'leaky': lambda x, y: tf.nn.leaky_relu(x, name=y, alpha=_LEAKY_RELU_ALPHA),
-    'relu': lambda x, y: tf.nn.relu(x, name=y)
+    'relu': lambda x, y: tf.nn.relu(x, name=y),
+    'swish': lambda x, y: x*tf.sigmoid(x, name=y),
+    'linear': lambda x, y: 
 }
 
 
@@ -40,40 +42,66 @@ def cfg_convolutional(B, H, W, C, net, param, weights_walker, stack, output_inde
     size = int(param['size'])
     filters = int(param['filters'])
     stride = int(param['stride'])
-    pad = 'same' if size == 1 or param['pad'] == '1' else 'valid'
+    pad = 'SAME' if size == 1 or param['pad'] == '1' else 'VALID'
     activation = None
-    weight_size = C * filters * size * size
+    groups = int(param["groups"]) if "groups" in param else 1
+    
+    weight_size = (C // groups) * filters * size * size
 
     if "activation" in param:
         activation = _activation_dict.get(param['activation'], None)
 
-    biases, scales, rolling_mean, rolling_variance, weights = \
-        weights_walker.get_weight(param['name'],
-                                  filters=filters,
-                                  weight_size=weight_size,
-                                  batch_normalize=batch_normalize)
-    weights = weights.reshape(filters, C, size, size).transpose([2, 3, 1, 0])
 
-    conv_args = {
-        "filters": filters,
-        "kernel_size": size,
-        "strides": stride,
-        "activation": None,
-        "padding": pad
-    }
+    if groups <= 1:
 
-    if const_inits:
-        conv_args.update({
-            "kernel_initializer": tf.initializers.constant(weights, verify_shape=True),
-            "bias_initializer": tf.initializers.constant(biases, verify_shape=True)
-        })
+        biases, scales, rolling_mean, rolling_variance, weights = \
+            weights_walker.get_weight(param['name'],
+                                      filters=filters,
+                                      weight_size=weight_size,
+                                      batch_normalize=batch_normalize)
+        weights = weights.reshape(filters, C, size, size).transpose([2, 3, 1, 0])   
 
-    if batch_normalize:
-        conv_args.update({
-            "use_bias": False
-        })
+        conv_args = {
+            "filters": filters,
+            "kernel_size": size,
+            "strides": stride,
+            "activation": None,
+            "padding": pad
+        }
 
-    net = tf.layers.conv2d(net, name=scope, **conv_args)
+        if const_inits:
+            conv_args.update({
+                "kernel_initializer": tf.initializers.constant(weights, verify_shape=True),
+                "bias_initializer": tf.initializers.constant(biases, verify_shape=True)
+            })
+
+        if batch_normalize:
+            conv_args.update({
+                "use_bias": False
+            })
+
+        net = tf.layers.conv2d(net, name=scope, **conv_args)
+
+    elif groups == C and C == filters:
+
+        biases, scales, rolling_mean, rolling_variance, weights = \
+            weights_walker.get_weight(param['name'],
+                                      filters=filters,
+                                      weight_size=weight_size,
+                                      batch_normalize=batch_normalize)
+        weights = weights.reshape(filters, (C // groups), size, size).transpose([2, 3, 0, 1])
+
+        conv_args = {
+            "filter": weights,
+            "strides": [stride, stride, stride, stride],
+            "padding": pad
+        }
+
+        net = tf.nn.depthwise_conv2d(net, name=scope, **conv_args)
+
+    else:
+        raise "Error: I don't know how to model convolutional layers with groups > 1."
+
 
     if batch_normalize:
         batch_norm_args = {
