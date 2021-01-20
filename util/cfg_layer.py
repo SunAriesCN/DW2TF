@@ -17,10 +17,10 @@ _BATCH_NORM_EPSILON = 1e-05
 
 
 _activation_dict = {
-    'leaky': lambda x, y: tf.nn.leaky_relu(x, name=y, alpha=_LEAKY_RELU_ALPHA),
-    'relu': lambda x, y: tf.nn.relu(x, name=y),
-    'swish': lambda x, y: x*tf.sigmoid(x, name=y),
-    'linear': lambda x, y: 
+    'leaky': lambda x, y: tf.nn.leaky_relu(x, name=y+"/Leaky", alpha=_LEAKY_RELU_ALPHA),
+    'relu': lambda x, y: tf.nn.relu(x, name=y+"/ReLu"),
+    'swish': lambda x, y: x*tf.sigmoid(x, name=y+"/Swish"),
+    'linear': lambda x, y: tf.identity(x, name=y+"/Linear"),
 }
 
 
@@ -93,7 +93,7 @@ def cfg_convolutional(B, H, W, C, net, param, weights_walker, stack, output_inde
 
         conv_args = {
             "filter": weights,
-            "strides": [stride, stride, stride, stride],
+            "strides": [1, stride, stride, 1],
             "padding": pad
         }
 
@@ -162,7 +162,6 @@ def cfg_route(B, H, W, C, net, param, weights_walker, stack, output_index, scope
     net = tf.concat(nets, axis=-1, name=scope)
     return net
 
-
 def cfg_reorg(B, H, W, C, net, param, weights_walker, stack, output_index, scope, training, const_inits, verbose):
     reorg_args = {
         "stride": int(param['stride'])
@@ -174,11 +173,52 @@ def cfg_reorg(B, H, W, C, net, param, weights_walker, stack, output_index, scope
 
 def cfg_shortcut(B, H, W, C, net, param, weights_walker, stack, output_index, scope, training, const_inits, verbose):
     index = int(param['from'])
-    activation = param['activation']
-    assert activation == 'linear'
+
+    if index > 0:
+        index -= 1
+
+    activation = None
+
+    if "activation" in param:
+        activation = _activation_dict.get(param['activation'], None)
+        assert not activation is None
 
     from_layer = stack[index]
-    net = tf.add(net, from_layer, name=scope)
+
+    # print(f"from: [{index}] {from_layer}")
+    # print(f"net: {net}")
+    # print(f"from_layer.channels : {from_layer.shape[-1]}")
+    # print(f"net.channels : {net.shape[-1]}")
+    channels_from = from_layer.shape[-1]
+    channels_input = net.shape[-1]
+
+    if channels_input < channels_from:
+        net = net + from_layer[:,:,:,:channels_input]
+    elif channels_input > channels_from:
+        first_part = net[:,:,:,:channels_from] + from_layer
+        second_part = net[:,:,:, channels_from:]
+        net = tf.concat([first_part, second_part], axis=-1)
+    else:
+        net = tf.add(net, from_layer, name=scope)
+
+    if activation:
+        net = activation(net, scope+'/Activation')
+
+    return net
+
+
+def cfg_scale_channels(B, H, W, C, net, param, weights_walker, stack, output_index, scope, training, const_inits, verbose):
+    index = int(param['from'])
+
+    if index > 0:
+        index -= 1
+
+    # print("cfg_scale_channels:")
+    # print(f"from: {stack[index]}")
+    # print(f"state: {stack[-1]}")
+    net = net*stack[index]
+    # print("cfg_scale_channels end...")
+
     return net
 
 
@@ -207,7 +247,6 @@ def cfg_ignore(B, H, W, C, net, param, weights_walker, stack, output_index, scop
 
     return net
 
-
 _cfg_layer_dict = {
     "net": cfg_net,
     "convolutional": cfg_convolutional,
@@ -218,7 +257,8 @@ _cfg_layer_dict = {
     "shortcut": cfg_shortcut,
     "yolo": cfg_yolo,
     "upsample": cfg_upsample,
-    "softmax": cfg_softmax
+    "softmax": cfg_softmax,
+    "scale_channels": cfg_scale_channels
 }
 
 

@@ -57,9 +57,6 @@ class WeightsReader:
         scales = self.walk(filters) if batch_normalize else None
         rolling_mean = self.walk(filters) if batch_normalize else None
         rolling_variance = self.walk(filters) if batch_normalize else None
-        print(self.offset)
-        print(weight_size)
-        print(self.size)
         weights = self.walk(weight_size)
         return biases, scales, rolling_mean, rolling_variance, weights
 
