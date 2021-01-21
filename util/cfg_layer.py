@@ -68,12 +68,21 @@ def cfg_convolutional(B, H, W, C, net, param, weights_walker, stack, output_inde
             "activation": None,
             "padding": pad
         }
-
+        
+        # conv_args = {
+        #     "filter": weights,
+        #     # "kernel_size": size,
+        #     "strides": [1, stride, stride, 1],
+        #     "activation": None,
+        #     "padding": pad
+        # }      
+        
         if const_inits:
             conv_args.update({
                 "kernel_initializer": tf.initializers.constant(weights, verify_shape=True),
                 "bias_initializer": tf.initializers.constant(biases, verify_shape=True)
             })
+
 
         if batch_normalize:
             conv_args.update({
@@ -81,6 +90,7 @@ def cfg_convolutional(B, H, W, C, net, param, weights_walker, stack, output_inde
             })
 
         net = tf.layers.conv2d(net, name=scope, **conv_args)
+        # net = tf.layers.conv2d(net, name=scope, **conv_args)
 
     elif groups == C and C == filters:
 
@@ -97,7 +107,11 @@ def cfg_convolutional(B, H, W, C, net, param, weights_walker, stack, output_inde
             "padding": pad
         }
 
-        net = tf.nn.depthwise_conv2d(net, name=scope, **conv_args)
+        # biases_tensor = tf.constant(biases, dtype=tf.float32)
+        
+        net = tf.nn.depthwise_conv2d(net, name=scope, **conv_args)#  + biases_tensor
+
+        # print(biases.shape)
 
     else:
         raise "Error: I don't know how to model convolutional layers with groups > 1."
